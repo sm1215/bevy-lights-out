@@ -1,0 +1,13 @@
+[package]
+name = "lights-out"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# dynamic feature is set here to enable fast compile
+# https://bevyengine.org/learn/book/getting-started/setup/#enable-fast-compiles-optional
+bevy = { version = "0.7.0", features = ["dynamic"] }
+bevy_mouse_tracking_plugin = "0.2.1"
+bevy_sprite_material = "0.2.0"
