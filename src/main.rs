@@ -22,9 +22,10 @@ const GRID_ROWS: u32 = 5;
 const GRID_COLUMNS: u32 = 5;
 
 const CELL_MARGIN: f32 = 4.;
-const CELL_OFF_COLOR: Color = Color::rgb(0.3, 0.3, 1.0);
-const CELL_HOVER_COLOR: Color = Color::rgb(0.1, 0.1, 0.8);
-const CELL_ON_COLOR: Color = Color::rgb(1.0, 0.3, 0.3);
+const CELL_OFF_COLOR: Color = Color::rgba(0.3, 0.3, 1.0, 0.8);
+const CELL_ON_COLOR: Color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+const CELL_OFF_HOVER_COLOR: Color = Color::rgba(0.3, 0.3, 1.0, 1.0);
+const CELL_ON_HOVER_COLOR: Color = Color::rgba(1.0, 0.3, 0.3, 1.0);
 const CELL_SIZE: Vec2 = const_vec2!([100., 100.]);
 
 fn main() {
@@ -51,7 +52,7 @@ impl Plugin for LightsOut {
             .add_plugin(MaterialSpritePlugin)
             .add_startup_system(setup)
             .add_system(mouse_system)
-            .add_system(hover_system)
+            .add_system(cell_system)
             ;
     }
 }
@@ -60,14 +61,15 @@ impl Plugin for LightsOut {
 #[derive(Component)]
 struct MainCamera;
 
-#[derive(Component)]
-struct Cell;
-
-#[derive(Component)]
-struct Hover;
-
-#[derive(Default)]
-struct HoverEvent;
+/// The hover bool controls a highlighting color around the currently hovered cell. 
+/// Used for UI navigation
+/// The state bool captures the current state of the cell. Changing the state of one cell
+/// affects the state of neighboring cells.
+#[derive(Debug, Component)]
+pub struct Cell {
+    hover: bool,
+    state: bool,
+}
 
 #[derive(Debug, Clone)]
 struct MaterialResource {
@@ -98,7 +100,7 @@ fn setup(
 
             commands
                 .spawn()
-                .insert(Cell)
+                .insert(Cell { state: false, hover: false })
                 .insert_bundle(SpriteBundle {
                     sprite: Sprite {
                         ..default()
@@ -110,51 +112,60 @@ fn setup(
                         ..default()
                     },
                     ..default()
-                })
-                .insert(Hover);
+                });
         }
     }
 }
 
 fn mouse_system(
-    mut mousebtn_evr: EventReader<MouseButtonInput>,
-) {
-    // TODO: track clicked state of cell
-    for ev in mousebtn_evr.iter() {
-        match ev.state {
-            ElementState::Pressed => {
-                println!("click {:?}", ev);
-            }
-            ElementState::Released => {
-                println!("release {:?}", ev);
-            }
-        }
-    }
-}
-
-fn hover_system(
     mouse: Res<MousePosWorld>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    hover_query: Query<(Entity, &Transform, &mut Handle<ColorMaterial>), With<Hover>>,
+    mut mousebtn_evr: EventReader<MouseButtonInput>,
+    mut hover_query: Query<(&mut Cell, &Transform)>,
 ) {
     // mouse sample: [-261.7417, -182.0289, 999.9]
     let mouse_translation = Vec3::new(mouse[0], mouse[1], mouse[2]);
     let mouse_scale = Vec2::new(1., 1.);
 
+    let mut current_cell = None;
     // translation sample: Vec3(208.0, -208.0, 0.0)
-    for (entity, transform, color) in hover_query.iter() {
+    for (mut cell, transform) in hover_query.iter() {
         let hover = collide(
             mouse_translation,
             mouse_scale,
             transform.translation,
             transform.scale.truncate(),
         );
-        let material = materials.get_mut(color).unwrap();
         if let Some(hover) = hover {
-            material.color = Color::RED.into();
+            cell.hover = true;
+            current_cell = Some(cell);
         } else {
-            material.color = Color::BLUE.into();
+            cell.hover = false;
         }
+    }
 
+    for ev in mousebtn_evr.iter() {
+        match ev.state {
+            ElementState::Pressed => {
+                if let Some(current_cell) = current_cell {
+                    current_cell.state = !current_cell.state;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn cell_system(
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut cell_query: Query<(&mut Cell, &mut Handle<ColorMaterial>)>,
+) {
+    for (mut cell, color) in cell_query.iter() {
+        let material = materials.get_mut(color).unwrap();
+        material.color = match (cell.state, cell.hover) {
+            (true, true) => CELL_ON_HOVER_COLOR,
+            (true, false) => CELL_ON_COLOR,
+            (false, true) => CELL_OFF_HOVER_COLOR,
+            (false, false) => CELL_OFF_COLOR,
+        }
     }
 }
